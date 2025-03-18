@@ -57,9 +57,9 @@ type BlacklistEntry struct {
 }
 
 // handleInbound wird aufgerufen, wenn ein Spieler versucht, sich zu verbinden
-func (p *blacklistPlugin) handleInbound(e *proxy.InboundConnectionEvent) {
+func (p *blacklistPlugin) handleInbound(e *proxy.LoginEvent) {
 	// Extrahiere die IP-Adresse aus der Verbindung
-	addr := e.InetAddress().String()
+	addr := e.Player().RemoteAddr().String()
 	ip := strings.Split(addr, ":")[0] // Entferne den Port
 	
 	// Prüfe, ob die IP in der Blacklist ist
@@ -75,7 +75,7 @@ func (p *blacklistPlugin) handleInbound(e *proxy.InboundConnectionEvent) {
 			Content: "You are on the global blacklist of fastasfuck.net\nTo appeal go to appeal.fastasfuck.net",
 		}
 		
-		e.Denied(disconnectMessage)
+		e.Disallow(disconnectMessage)
 	}
 }
 
