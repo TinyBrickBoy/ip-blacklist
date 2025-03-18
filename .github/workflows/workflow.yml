@@ -1,8 +1,10 @@
 name: Workflow
 on:
   push:
+    tags:
+      - '*'  # Nur für Releases (Tag-Pushes)
   pull_request:
-    types: [ opened, reopened ]
+    types: [opened, reopened]
 
 env:
   REGISTRY: ghcr.io
@@ -24,6 +26,7 @@ jobs:
         with:
           version: latest
           args: --timeout 3m0s
+
   test:
     strategy:
       fail-fast: false
@@ -42,8 +45,9 @@ jobs:
 
       - name: Test
         run: make test
+
   build:
-    if: ( github.event_name == 'push' && ( github.ref == 'refs/heads/main' || startsWith(github.ref, 'refs/tags/') ) )
+    if: startsWith(github.ref, 'refs/tags/')
     needs:
       - lint
       - test
@@ -89,6 +93,7 @@ jobs:
           tags: |
             ${{ steps.image-ref.outputs.image }}
             ${{ steps.image-ref.outputs.image_latest }}
+
   releaser:
     if: startsWith(github.ref, 'refs/tags/')
     needs:
