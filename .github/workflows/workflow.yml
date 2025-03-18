@@ -1,122 +1,106 @@
-name: Workflow
+name: Build and Release
+
 on:
   push:
-    branches:
-      - main  # Workflow läuft nur bei Push auf "main"
-    tags:
-      - '*'  # Workflow läuft bei Tag-Push (Releases)
+    branches: [ main ]
+    tags: [ 'v*' ]
   pull_request:
-    types: [opened, reopened]
-
-env:
-  REGISTRY: ghcr.io
+    branches: [ main ]
 
 jobs:
   lint:
+    name: Lint
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v3
 
-      - name: Setup Go
-        uses: actions/setup-go@v5
+      - name: Set up Go
+        uses: actions/setup-go@v4
         with:
-          go-version-file: go.mod
+          go-version: '1.21'
+          cache: true
 
       - name: golangci-lint
-        uses: golangci/golangci-lint-action@v6
+        uses: golangci/golangci-lint-action@v3
         with:
           version: latest
-          args: --timeout 3m0s
 
   test:
-    strategy:
-      fail-fast: false
-      matrix:
-        platform: [ ubuntu-latest, macos-latest, windows-latest ]
-    runs-on: ${{ matrix.platform }}
+    name: Test
+    runs-on: ubuntu-latest
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v3
 
-      - name: Setup Go with cache
-        uses: actions/setup-go@v5
+      - name: Set up Go
+        uses: actions/setup-go@v4
         with:
+          go-version: '1.21'
           cache: true
-          go-version-file: go.mod
 
       - name: Test
-        run: make test
+        run: go test -v ./...
 
   build:
-    if: github.event_name == 'push'
-    needs:
-      - lint
-      - test
+    name: Build and Release
+    needs: [lint, test]
     runs-on: ubuntu-latest
-    outputs:
-      image: ${{ steps.image-ref.outputs.image }}
-      image_latest: ${{ steps.image-ref.outputs.image_latest }}
+    permissions:
+      contents: write
+      packages: write
+      
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
-
-      - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@v3
-
-      - name: Login to Container registry
-        uses: docker/login-action@v3
-        with:
-          registry: ${{ env.REGISTRY }}
-          username: ${{ github.actor }}
-          password: ${{ secrets.GITHUB_TOKEN }}
-
-      - name: Create image ref
-        id: image-ref
-        run: |
-          REF=$(git rev-parse --short $GITHUB_SHA)
-          IMAGE=${{ env.REGISTRY }}/${{ github.repository }}:${REF}
-          IMAGE_LATEST=${{ env.REGISTRY }}/${{ github.repository }}:latest
-          
-          echo "image=${IMAGE}" >> $GITHUB_STATE
-          echo "image_latest=${IMAGE_LATEST}" >> $GITHUB_OUTPUT
-          
-          echo "${IMAGE}" >> $GITHUB_STEP_SUMMARY
-
-      - name: Build and push docker image
-        uses: docker/build-push-action@v6
-        with:
-          context: .
-          file: ./Dockerfile
-          push: true
-          platforms: linux/amd64,linux/arm64,windows/amd64,windows/arm64,darwin/amd64,darwin/arm64,linux/arm/v7,linux/arm/v8,linux/s390x
-          cache-from: type=registry,ref=${{ steps.image-ref.outputs.image_latest }}
-          cache-to: type=inline
-          tags: |
-            ${{ steps.image-ref.outputs.image }}
-            ${{ steps.image-ref.outputs.image_latest }}
-
-  releaser:
-    if: startsWith(github.ref, 'refs/tags/')
-    needs:
-      - build
-    runs-on: ubuntu-latest
-    steps:
-      - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v3
         with:
           fetch-depth: 0
 
-      - name: Setup Go
-        uses: actions/setup-go@v5
+      - name: Set up Go
+        uses: actions/setup-go@v4
         with:
+          go-version: '1.21'
           cache: true
-          go-version-file: go.mod
 
-      - name: Run GoReleaser
-        uses: goreleaser/goreleaser-action@v6
+      - name: Docker Login
+        uses: docker/login-action@v2
         with:
-          version: latest
-          args: release --rm-dist
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v2
+
+      - name: Docker meta
+        id: meta
+        uses: docker/metadata-action@v4
+        with:
+          images: ghcr.io/tinybrickboy/ip-blacklist  # Changed to lowercase
+          tags: |
+            type=semver,pattern={{version}}
+            type=semver,pattern={{major}}.{{minor}}
+            type=semver,pattern={{major}}
+            type=ref,event=branch
+            type=raw,value=latest,enable={{is_default_branch}}
+
+      - name: Build and push Docker image
+        uses: docker/build-push-action@v4
+        with:
+          context: .
+          push: ${{ github.event_name != 'pull_request' }}
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v3
+        with:
+          node-version: 'lts/*'
+
+      - name: Release
+        if: startsWith(github.ref, 'refs/tags/')
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: npx semantic-release
