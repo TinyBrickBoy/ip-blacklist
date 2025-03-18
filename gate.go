@@ -8,7 +8,7 @@ import (
 
 func main() {
     proxy.Plugins = append(proxy.Plugins,
-        ipblacklist.Plugin,
+        blacklist.Plugin,
     )
     gate.Execute()
 }
