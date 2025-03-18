@@ -75,7 +75,7 @@ func (p *blacklistPlugin) handleInbound(e *proxy.LoginEvent) {
 			Content: "You are on the global blacklist of fastasfuck.net\nTo appeal go to appeal.fastasfuck.net",
 		}
 		
-		e.Disallow(disconnectMessage)
+		_ = e.Player().Disconnect(disconnectMessage)
 	}
 }
 
