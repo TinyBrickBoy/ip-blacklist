@@ -1,7 +1,7 @@
 package main
 
 import (
-	"github.com/TinyBrickBoy/ip-blacklist/ipblacklist" // Direkter Import ohne plugins/ Verzeichnis
+	"github.com/minekube/gate-plugin-template/plugins/ipblacklist" // Local import path
 	"go.minekube.com/gate/cmd/gate"
 	"go.minekube.com/gate/pkg/edition/java/proxy"
 )
