@@ -76,7 +76,10 @@ func (p *blacklistPlugin) handleInbound(e *proxy.LoginEvent) {
 			Content: "You are on the global blacklist of fastasfuck.net\nTo appeal go to appeal.fastasfuck.net",
 		}
 
-		_ = e.Player().Disconnect(disconnectMessage)
+		// Der Fehler wurde behoben - wir fangen den Rückgabewert ordnungsgemäß ab
+		if err := e.Player().Disconnect(disconnectMessage); err != nil {
+			p.log.Error(err, "Fehler beim Trennen der Verbindung", "ip", ip)
+		}
 	}
 }
 
